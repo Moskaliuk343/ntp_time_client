@@ -2,14 +2,13 @@
 mod config;
 mod logger;
 mod ntp;
+mod ntp_packet;
 
 use chrono::Local;
 use config::Config;
 use std::thread;
 use std::time::Duration;
 
-// Записуємо повідомлення в журнал.
-// Якщо запис неможливий, завершуємо програму.
 fn write_log_or_exit(message: &str) {
     if let Err(error) = logger::log_event(message) {
         eprintln!("Помилка логування: {}", error);
@@ -19,7 +18,7 @@ fn write_log_or_exit(message: &str) {
 
 fn main() {
     println!("====================================");
-    println!("       NTP Time Client v0.4.0");
+    println!("       NTP Time Client v0.5.0");
     println!("====================================");
 
     let config = match Config::from_args() {
@@ -31,12 +30,11 @@ fn main() {
         }
     };
 
-    println!("Операційна система: {}", std::env::consts::OS);
+    println!("ОС: {}", std::env::consts::OS);
     println!("NTP-сервер: {}", config.server);
     println!("Кількість запитів: {}", config.count);
     println!("Інтервал: {} сек.", config.interval);
-    println!("Файл журналу: {}", logger::LOG_FILE);
-
+    println!("Журнал: {}", logger::LOG_FILE);
     println!("------------------------------------");
 
     write_log_or_exit(&format!(
@@ -47,66 +45,81 @@ fn main() {
     let mut successful = 0;
     let mut failed = 0;
 
-    println!("Початок отримання NTP-часу...\n");
-
     for number in 1..=config.count {
-        println!("[Запит {} із {}]", number, config.count);
+        println!("\n[Запит {} із {}]", number, config.count);
 
         match ntp::get_ntp_time(&config.server) {
-            Ok(utc_time) => {
-                let local_time = utc_time.with_timezone(&Local);
+            Ok(result) => {
+                successful += 1;
+
+                let local_time =
+                    result.estimated_time.with_timezone(&Local);
 
                 println!(
-                    "UTC: {}",
-                    utc_time.format("%Y-%m-%d %H:%M:%S%.3f")
+                    "Час сервера (T3): {}",
+                    result.server_time.format(
+                        "%Y-%m-%d %H:%M:%S%.3f"
+                    )
+                );
+
+                println!(
+                    "Оцінка часу UTC: {}",
+                    result.estimated_time.format(
+                        "%Y-%m-%d %H:%M:%S%.3f"
+                    )
                 );
 
                 println!(
                     "Місцевий час: {}",
-                    local_time.format("%Y-%m-%d %H:%M:%S%.3f %:z")
+                    local_time.format(
+                        "%Y-%m-%d %H:%M:%S%.3f %:z"
+                    )
                 );
 
-                println!("Статус: Успішно\n");
+                println!(
+                    "Мережева затримка: {:.3} мс",
+                    result.delay_ms
+                );
 
-                successful += 1;
+                println!(
+                    "Зміщення годинника: {:+.3} мс",
+                    result.offset_ms
+                );
 
-                let message = format!(
-                    "SUCCESS | server={} | request={} | utc={}",
+                println!("Статус: Успішно");
+
+                write_log_or_exit(&format!(
+                    "SUCCESS | server={} | request={} | utc={} | delay_ms={:.3} | offset_ms={:+.3}",
                     config.server,
                     number,
-                    utc_time.format("%Y-%m-%d %H:%M:%S%.3f")
-                );
-
-                write_log_or_exit(&message);
+                    result.estimated_time.format(
+                        "%Y-%m-%d %H:%M:%S%.3f"
+                    ),
+                    result.delay_ms,
+                    result.offset_ms
+                ));
             }
 
             Err(error) => {
-                eprintln!("Помилка NTP: {}\n", error);
-
                 failed += 1;
 
-                let message = format!(
-                    "ERROR | server={} | request={} | error={}",
-                    config.server,
-                    number,
-                    error
-                );
+                eprintln!("Помилка NTP: {}", error);
 
-                write_log_or_exit(&message);
+                write_log_or_exit(&format!(
+                    "ERROR | server={} | request={} | error={}",
+                    config.server, number, error
+                ));
             }
         }
 
         if number < config.count {
-            thread::sleep(
-                Duration::from_secs(config.interval)
-            );
+            thread::sleep(Duration::from_secs(config.interval));
         }
     }
 
-    println!("====================================");
+    println!("\n====================================");
     println!("Успішних запитів: {}", successful);
     println!("Невдалих запитів: {}", failed);
-    println!("Журнал: {}", logger::LOG_FILE);
     println!("Моніторинг завершено.");
 
     write_log_or_exit(&format!(
