@@ -18,7 +18,7 @@ fn write_log_or_exit(message: &str) {
 
 fn main() {
     println!("====================================");
-    println!("       NTP Time Client v0.5.0");
+    println!("       NTP Time Client v1.0.0");
     println!("====================================");
 
     let config = match Config::from_args() {

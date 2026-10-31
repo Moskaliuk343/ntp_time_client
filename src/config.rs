@@ -17,7 +17,7 @@ impl Config {
         let mut config = Config {
             server: "pool.ntp.org".to_string(),
             count: 1,
-            interval: 2,
+            interval: 64,
         };
 
         let mut i = 0;
@@ -31,9 +31,8 @@ impl Config {
 
                 "--server" => {
                     i += 1;
-                    let value = args.get(i).ok_or(
-                        "Не вказано адресу після --server"
-                    )?;
+                    let value = args.get(i)
+                        .ok_or("Не вказано адресу після --server")?;
 
                     if value.is_empty() || value.starts_with('-') {
                         return Err("Некоректна адреса NTP-сервера".into());
@@ -44,34 +43,29 @@ impl Config {
 
                 "--count" => {
                     i += 1;
-                    let value = args.get(i).ok_or(
-                        "Не вказано число після --count"
-                    )?;
+                    let value = args.get(i)
+                        .ok_or("Не вказано число після --count")?;
 
-                    config.count = value.parse().map_err(|_| {
-                        "Кількість запитів повинна бути числом"
-                    })?;
+                    config.count = value.parse()
+                        .map_err(|_| "Кількість запитів повинна бути числом")?;
 
                     if !(1..=100).contains(&config.count) {
-                        return Err(
-                            "--count повинен бути від 1 до 100".into()
-                        );
+                        return Err("--count повинен бути від 1 до 100".into());
                     }
                 }
 
                 "--interval" => {
                     i += 1;
-                    let value = args.get(i).ok_or(
-                        "Не вказано число після --interval"
-                    )?;
+                    let value = args.get(i)
+                        .ok_or("Не вказано число після --interval")?;
 
-                    config.interval = value.parse().map_err(|_| {
-                        "Інтервал повинен бути цілим числом"
-                    })?;
+                    config.interval = value.parse()
+                        .map_err(|_| "Інтервал повинен бути цілим числом")?;
 
-                    if !(1..=60).contains(&config.interval) {
+                    if !(16..=3600).contains(&config.interval) {
                         return Err(
-                            "--interval повинен бути від 1 до 60".into()
+                            "--interval повинен бути від 16 до 3600 секунд"
+                                .into()
                         );
                     }
                 }
@@ -91,7 +85,7 @@ impl Config {
     }
 
     fn print_help() {
-        println!("NTP Time Client v0.3.0");
+        println!("NTP Time Client v1.0.0");
         println!();
         println!("Використання:");
         println!("  cargo run -- [параметри]");
@@ -99,13 +93,13 @@ impl Config {
         println!("Параметри:");
         println!("  --server HOST   Адреса NTP-сервера");
         println!("  --count N       Кількість запитів (1-100)");
-        println!("  --interval N    Інтервал у секундах (1-60)");
+        println!("  --interval N    Інтервал у секундах (16-3600)");
         println!("  --help, -h      Показати довідку");
         println!();
         println!("Значення за замовчуванням:");
         println!("  Сервер: pool.ntp.org");
         println!("  Кількість: 1");
-        println!("  Інтервал: 2 сек.");
+        println!("  Інтервал: 64 сек.");
     }
 }
 
@@ -121,7 +115,7 @@ mod tests {
 
         assert_eq!(config.server, "pool.ntp.org");
         assert_eq!(config.count, 1);
-        assert_eq!(config.interval, 2);
+        assert_eq!(config.interval, 64);
     }
 
     #[test]
@@ -132,7 +126,7 @@ mod tests {
             "--count".to_string(),
             "5".to_string(),
             "--interval".to_string(),
-            "3".to_string(),
+            "30".to_string(),
         ];
 
         let config = Config::parse_args(&args)
@@ -141,7 +135,7 @@ mod tests {
 
         assert_eq!(config.server, "time.google.com");
         assert_eq!(config.count, 5);
-        assert_eq!(config.interval, 3);
+        assert_eq!(config.interval, 30);
     }
 
     #[test]
@@ -157,6 +151,15 @@ mod tests {
     #[test]
     fn unknown_argument() {
         let args = vec!["--unknown".to_string()];
+        assert!(Config::parse_args(&args).is_err());
+    }
+
+    #[test]
+    fn rejects_too_short_interval() {
+        let args = vec![
+            "--interval".to_string(),
+            "2".to_string(),
+        ];
 
         assert!(Config::parse_args(&args).is_err());
     }
